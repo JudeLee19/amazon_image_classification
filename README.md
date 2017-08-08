@@ -5,4 +5,4 @@ amazon image classification using residual network
 
 Training Precision : 95%
 
-![]('./performance.jpg')
+![]('./performance.png')
