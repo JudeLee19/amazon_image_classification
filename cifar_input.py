@@ -51,6 +51,9 @@ def build_input(dataset, data_path, batch_size, mode):
     elif dataset == 'deep_fashion':
         image_size = 128
         num_classes = 50
+    elif dataset == 'naver':
+        image_size = 128
+        num_classes = 27
     else:
         raise ValueError('Not supported dataset %s', dataset)
     
@@ -92,6 +95,32 @@ def build_input(dataset, data_path, batch_size, mode):
         table = tf.contrib.lookup.HashTable(
             tf.contrib.lookup.KeyValueTensorInitializer(file_name_list, class_label_list, key_dtype=tf.string,
                                                         value_dtype=tf.int32), -1)
+    
+    elif dataset == 'naver':
+        file_name_list = joblib.load('data/train_data/train_file_list')
+        class_label_list = joblib.load('data/train_data/train_cate_list')
+        
+    
+        filename_queue = tf.train.string_input_producer(file_name_list)
+        image_reader = tf.WholeFileReader()
+    
+        file_path, image_file = image_reader.read(filename_queue)
+
+        image = tf.image.decode_image(image_file, channels=3)
+        #image = tf.image.decode_jpeg(image_file, channels=3)
+
+        #image_shape = tf.Print(image.shape, [image.shape], summarize=999999, message="image_shape")
+        longer = tf.reduce_max(tf.shape(image))
+        image = tf.image.resize_image_with_crop_or_pad(image, longer, longer)
+        image = tf.image.resize_images(image, [128, 128], method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+        
+        # if len(image.shape.as_list()) == 4:
+        #     image = tf.squeeze(image, [0])
+            
+        table = tf.contrib.lookup.HashTable(
+            tf.contrib.lookup.KeyValueTensorInitializer(file_name_list, class_label_list, key_dtype=tf.string,
+                                                        value_dtype=tf.int32), -1)
+    
     elif dataset == 'deep_fashion':
         file_name_list = joblib.load('./deep_fashion_data/file_name_list')
         cate_num_list = joblib.load('./deep_fashion_data/cate_num_list')

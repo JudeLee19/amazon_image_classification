@@ -18,7 +18,6 @@
 import time
 import six
 import sys
-
 import cifar_input
 import numpy as np
 import resnet_model
@@ -52,7 +51,12 @@ def train(hps):
     images, labels = cifar_input.build_input(
         FLAGS.dataset, FLAGS.train_data_path, hps.batch_size, FLAGS.mode)
     
-    model = resnet_model.ResNet(hps, images, labels, FLAGS.mode)
+    if FLAGS.dataset == 'naver':
+        import joblib
+        class_ratio_list = joblib.load('data/train_data/train_cate_ratio_list')
+        model = resnet_model.ResNet(hps, images, labels, FLAGS.mode, class_ratio_list)
+    else:
+        model = resnet_model.ResNet(hps, images, labels, FLAGS.mode)
     model.build_graph()
     
     param_stats = tf.contrib.tfprof.model_analyzer.print_model_analysis(
@@ -179,11 +183,13 @@ def main(_):
         dev = '/cpu:0'
     elif FLAGS.num_gpus == 1:
         dev = '/gpu:0'
+    elif FLAGS.num_gpus > 1:
+        devices = ['/gpu:0', '/gpu:1', '/gpu:2', '/gpu:3']
     else:
         raise ValueError('Only support 0 or 1 gpu.')
     
     if FLAGS.mode == 'train':
-        batch_size = 64
+        batch_size = 128
     elif FLAGS.mode == 'eval':
         batch_size = 100
     
@@ -193,8 +199,9 @@ def main(_):
         num_classes = 100
     elif FLAGS.dataset == 'amazon':
         num_classes = 33
-    elif FLAGS.dataset == 'deep_fashion':
-        num_classes = 50
+    elif FLAGS.dataset == 'naver':
+        num_classes = 27
+        
     
     hps = resnet_model.HParams(batch_size=batch_size,
                                num_classes=num_classes,
@@ -206,11 +213,20 @@ def main(_):
                                relu_leakiness=0.1,
                                optimizer='mom')
     
-    with tf.device(dev):
-        if FLAGS.mode == 'train':
-            train(hps)
-        elif FLAGS.mode == 'eval':
-            evaluate(hps)
+    if FLAGS.num_gpus > 1:
+        for i in range(FLAGS.num_gpus):
+            with tf.device('/gpu:%d' % i):
+                with tf.name_scope('%s_%d' % ("gpu", i)) as scope:
+                    if FLAGS.mode == 'train':
+                        train(hps)
+                    elif FLAGS.mode == 'eval':
+                        evaluate(hps)
+    else:
+        with tf.device(dev):
+            if FLAGS.mode == 'train':
+                train(hps)
+            elif FLAGS.mode == 'eval':
+                evaluate(hps)
 
 
 if __name__ == '__main__':

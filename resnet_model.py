@@ -25,9 +25,8 @@ from collections import namedtuple
 import numpy as np
 import tensorflow as tf
 import six
-
+import os
 from tensorflow.python.training import moving_averages
-
 
 HParams = namedtuple('HParams',
                      'batch_size, num_classes, min_lrn_rate, lrn_rate, '
@@ -38,7 +37,7 @@ HParams = namedtuple('HParams',
 class ResNet(object):
   """ResNet model."""
   
-  def __init__(self, hps, images, labels, mode):
+  def __init__(self, hps, images, labels, mode, class_ratio_list=None):
     """ResNet constructor.
 
     Args:
@@ -51,9 +50,9 @@ class ResNet(object):
     self._images = images
     self.labels = labels
     self.mode = mode
-    
+    self.class_ratio_list = None
     self._extra_train_ops = []
-  
+    
   def build_graph(self):
     """Build a whole graph for the model."""
     self.global_step = tf.contrib.framework.get_or_create_global_step()
@@ -110,19 +109,36 @@ class ResNet(object):
     
     with tf.variable_scope('unit_last'):
       x = self._batch_norm('final_bn', x)
+      
+      self.before_relu_x = x
       x = self._relu(x, self.hps.relu_leakiness)
+      
+      self.relu_x = x
       x = self._global_avg_pool(x)
+      self.global_avg_pool = x
     
     with tf.variable_scope('logit'):
       logits = self._fully_connected(x, self.hps.num_classes)
       self.predictions = tf.nn.softmax(logits)
     
     with tf.variable_scope('costs'):
-      xent = tf.nn.softmax_cross_entropy_with_logits(
-        logits=logits, labels=self.labels)
-      self.cost = tf.reduce_mean(xent, name='xent')
-      self.cost += self._decay()
       
+      #cross_entropy = tf.nn.weighted_cross_entropy_with_logits(logits=self.logits,
+      #                                                         targets=tf.one_hot(self.ground_label, depth=3),
+      #                                                         pos_weight=classes_weights)
+
+      
+      if self.class_ratio_list == None:
+        xent = tf.nn.softmax_cross_entropy_with_logits(
+          logits=logits, labels=self.labels)
+        self.cost = tf.reduce_mean(xent, name='xent')
+        self.cost += self._decay()
+      else:
+        classes_weights = tf.constant(self.class_ratio_list)
+        xent = tf.nn.weighted_cross_entropy_with_logits(logits=logits, targets=self.labels, pos_weight=classes_weights)
+        self.cost = tf.reduce_mean(xent, name='xent')
+        self.cost += self._decay()
+          
       tf.summary.scalar('cost', self.cost)
   
   def _build_train_op(self):
